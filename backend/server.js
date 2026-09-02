@@ -1,3 +1,4 @@
+
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -10,22 +11,30 @@ const adminRoutes = require('./routes/adminRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
 
 dotenv.config();
+
 const app = express();
 
-// 1. Enhanced CORS Config
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// ================================
+// CORS
+// ================================
+app.use(cors());
+
+// Parse JSON request body
 app.use(express.json());
 
-// Initial Admin Creation Function
+// ================================
+// Initial Admin Creation
+// ================================
 const seedInitialAdmin = async () => {
   try {
     const adminExists = await User.findOne({ role: 'ADMIN' });
+
     if (!adminExists) {
-      const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD, 10);
+      const hashedPassword = await bcrypt.hash(
+        process.env.ADMIN_PASSWORD,
+        10
+      );
+
       await User.create({
         name: 'Super Admin',
         email: process.env.ADMIN_EMAIL,
@@ -33,52 +42,93 @@ const seedInitialAdmin = async () => {
         role: 'ADMIN',
         status: 'ACTIVE',
       });
+
       console.log('✅ Initial Admin Account Created Automatically.');
     }
-  } catch (err) {
-    console.error('Error seeding admin:', err.message);
+  } catch (error) {
+    console.error('❌ Error seeding admin:', error.message);
   }
 };
 
-// 2. Serverless Friendly MongoDB Middleware
+// ================================
+// MongoDB Connection
+// ================================
 let isConnected = false;
+
 const connectDB = async () => {
-  if (isConnected) return;
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return;
+  }
+
   try {
     const db = await mongoose.connect(process.env.MONGO_URI);
+
     isConnected = db.connections[0].readyState === 1;
-    console.log('MongoDB Connected');
+
+    console.log('✅ MongoDB Connected');
+
     await seedInitialAdmin();
-  } catch (err) {
-    console.error('MongoDB Connection Error:', err);
+  } catch (error) {
+    console.error('❌ MongoDB Connection Error:', error.message);
+
+    throw error;
   }
 };
 
-// Har incoming request se pehle DB connection verify/connect karein
+// ================================
+// Database Middleware
+// ================================
 app.use(async (req, res, next) => {
-  await connectDB();
-  next();
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    res.status(500).json({
+      message: 'Database connection failed',
+    });
+  }
 });
 
-// 3. Test Routes (Root & /api)
+// ================================
+// Test Routes
+// ================================
+
 app.get('/', (req, res) => {
-  res.status(200).send('Smart Complaint System API is running live on Vercel!');
+  res.status(200).send(
+    'Smart Complaint System API is running live on Vercel!'
+  );
 });
 
 app.get('/api', (req, res) => {
-  res.status(200).json({ status: 'Success', message: 'Smart Complaint System API (/api) is Live!' });
+  res.status(200).json({
+    status: 'Success',
+    message: 'Smart Complaint System API (/api) is Live!',
+  });
 });
 
-// 4. API Endpoints
+// ================================
+// API Routes
+// ================================
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/complaints', complaintRoutes);
 
+// ================================
 // Local Development
+// ================================
+
 const PORT = process.env.PORT || 5000;
+
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
 }
 
-// Vercel Serverless Export
+// ================================
+// Vercel
+// ================================
+
 module.exports = app;
+
